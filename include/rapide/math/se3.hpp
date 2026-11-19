@@ -34,13 +34,13 @@ struct SE3 {
 
     // ── Spatial motion actions ───────────────────────────────────────────────
     // X (child→parent): ω_p = R·ω_c,  v_p = p×ω_p + R·v_c
-    Motion6<S> act_on_motion(const Motion6<S>& m) const {
+    Twist<S> act_on_motion(const Twist<S>& m) const {
         Eigen::Matrix<S,3,1> omega = R * m.angular;
         return {omega, p.cross(omega) + R * m.linear};
     }
 
     // X⁻¹ (parent→child): ω_c = Rᵀ·ω_p,  v_c = Rᵀ·(v_p - p×ω_p)
-    Motion6<S> inv_act_on_motion(const Motion6<S>& m) const {
+    Twist<S> inv_act_on_motion(const Twist<S>& m) const {
         Eigen::Matrix<S,3,1> omega = R.transpose() * m.angular;
         return {omega, R.transpose() * (m.linear - p.cross(m.angular))};
     }
@@ -48,14 +48,14 @@ struct SE3 {
     // ── Spatial force actions ────────────────────────────────────────────────
     // X⁻ᵀ (child→parent, dual of X⁻¹ for motion):
     //   f_p = R·f_c,  τ_p = R·τ_c - p×f_p
-    Force6<S> act_on_force(const Force6<S>& f) const {
+    Wrench<S> act_on_force(const Wrench<S>& f) const {
         Eigen::Matrix<S,3,1> flin = R * f.force;
         return {R * f.torque - p.cross(flin), flin};
     }
 
     // Xᵀ (parent→child, dual of X for motion):
     //   f_c = Rᵀ·f_p,  τ_c = Rᵀ·(τ_p + p×f_p)
-    Force6<S> inv_act_on_force(const Force6<S>& f) const {
+    Wrench<S> inv_act_on_force(const Wrench<S>& f) const {
         Eigen::Matrix<S,3,1> flin = R.transpose() * f.force;
         return {R.transpose() * (f.torque + p.cross(f.force)), flin};
     }

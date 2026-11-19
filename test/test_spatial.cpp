@@ -18,9 +18,9 @@ TEST_CASE("SpatialInertia::apply matches 6x6 matrix multiplication") {
            0.0, 0.0, 2.5;
 
     SpatialInertia<S> I{mass, com, I_c};
-    Motion6<S> m{{1.0, 0.5, -0.3}, {0.2, -0.1, 0.4}};
+    Twist<S> m{{1.0, 0.5, -0.3}, {0.2, -0.1, 0.4}};
 
-    Force6<S> f_method = I.apply(m);
+    Wrench<S> f_method = I.apply(m);
 
     // Compare against full 6×6 multiply.
     Eigen::Matrix<S,6,6> M6 = I.to_matrix();
@@ -39,18 +39,18 @@ TEST_CASE("SpatialInertia::to_matrix is symmetric") {
 
 TEST_CASE("SpatialInertia kinetic energy is non-negative") {
     SpatialInertia<S> I{5.0, {0.0, 0.0, 0.1}, M3::Identity()};
-    Motion6<S> m{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}};
+    Twist<S> m{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}};
     // KE = 0.5 * m^T * I * m
-    Force6<S> Im = I.apply(m);
+    Wrench<S> Im = I.apply(m);
     S ke = 0.5 * Im.dot(m);
     REQUIRE(ke > 0.0);
 }
 
 TEST_CASE("cross_motion_force matches 6x6 computation") {
-    Motion6<S> v{{1.0, 0.0, 0.5}, {0.0, 1.0, 0.0}};
-    Force6<S>  f{{0.5, -0.3, 0.1}, {1.0, 0.0, -0.2}};
+    Twist<S> v{{1.0, 0.0, 0.5}, {0.0, 1.0, 0.0}};
+    Wrench<S>  f{{0.5, -0.3, 0.1}, {1.0, 0.0, -0.2}};
 
-    Force6<S> result = cross_motion_force(v, f);
+    Wrench<S> result = cross_motion_force(v, f);
 
     // Build the 6×6 spatial cross operator for motion and apply to force.
     // (v ×*) = -（v ×）^T in Featherstone's notation.

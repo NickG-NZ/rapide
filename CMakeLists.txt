@@ -13,6 +13,11 @@ add_library(rapide INTERFACE)
 target_include_directories(rapide INTERFACE include vehicles)
 target_link_libraries(rapide INTERFACE Eigen3::Eigen)
 
+# Examples
+add_executable(motorcycle_rollout examples/motorcycle_rollout.cpp)
+target_link_libraries(motorcycle_rollout PRIVATE rapide)
+target_compile_options(motorcycle_rollout PRIVATE -Wall -Wextra -O2)
+
 # Tests
 find_package(Catch2 3 QUIET)
 if(Catch2_FOUND)

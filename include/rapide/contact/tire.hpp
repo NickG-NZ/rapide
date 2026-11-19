@@ -7,7 +7,7 @@ namespace rapide {
 // TireContact<S> — spring-damper normal force + linear-slip friction
 // on a flat ground plane at z = 0.
 //
-// Returns Force6 in WORLD frame acting on the wheel body.
+// Returns Wrench in WORLD frame acting on the wheel body.
 // Call once per wheel per step; add the result to f_ext[wheel_body_index].
 template<typename S>
 struct TireContact {
@@ -20,15 +20,15 @@ struct TireContact {
     //   .p = position of wheel centre in world
     //   .R = wheel body orientation
     // v_wheel_world: wheel-body spatial velocity in WHEEL BODY frame.
-    Force6<S> compute(const SE3<S>& X_wheel_world,
-                      const Motion6<S>& v_wheel_body) const
+    Wrench<S> compute(const SE3<S>& X_wheel_world,
+                      const Twist<S>& v_wheel_body) const
     {
         const Eigen::Matrix<S,3,1>& p_world = X_wheel_world.p;
 
         // Penetration depth: how far the wheel centre is below (radius) from ground.
         S penetration = radius - p_world(2);
         if (penetration <= S(0)) {
-            return Force6<S>::Zero();  // no contact
+            return Wrench<S>::Zero();  // no contact
         }
 
         // Normal velocity at contact patch (world z direction).
@@ -71,7 +71,7 @@ struct TireContact {
 
 // Convenience: compute gravitational force on a body in world frame.
 template<typename S>
-Force6<S> gravity_force(S mass, const Eigen::Matrix<S,3,1>& g = {S(0), S(0), S(-9.81)}) {
+Wrench<S> gravity_force(S mass, const Eigen::Matrix<S,3,1>& g = {S(0), S(0), S(-9.81)}) {
     return {Eigen::Matrix<S,3,1>::Zero(), mass * g};
 }
 
