@@ -1,19 +1,111 @@
 # rapide
 
-Minimal multibody physics simulator for autonomous wheeled vehicles, written in C++.
-Targets autonomous motorcycle simulation with articulated robot arms. Differentiable
-by design: every algorithm is templated on `Scalar` so autodiff types (e.g.
-`Eigen::AutoDiffScalar`) drop in without code changes.
+Multibody physics simulator for autonomous wheeled vehicles, written in C++20.
+The maximal-coordinate backend supports closed linkages using analytic joint
+constraints and a dense, rank-aware impulse solve. Coal supplies collision geometry
+for compliant contact response. The original scalar-templated ABA backend remains
+available for tree models and comparisons.
 
 ## Scope
 
-- Rigid-body dynamics via Featherstone's Articulated Body Algorithm (ABA)
-- Kinematic tree representation (floating base + joints)
-- Tire spring-damper contact (flat ground); no general contact solver
-- No suspension or steering in v1 — just rolling chassis physics
-- No external physics library dependency (Eigen only)
+- CPU, double-precision maximal-coordinate rigid-body dynamics
+- Ball, fixed, revolute, and prismatic joints in arbitrary graphs, including loops
+- Mass-weighted position/velocity projection and redundant-constraint handling
+- Point spring-dampers, scalar joint springs, and torque/force actuation
+- Coal broad phase, collision filtering, and compliant contact with sliding friction
+- Legacy ABA motorcycle example and flat-ground tire model
+
+Hard contact, joint limits, restitution, continuous collision detection, and
+autodiff are not implemented in the maximal backend. Compliant contacts permit
+penetration and need a timestep appropriate to stiffness and mass.
+
+## Maximal-coordinate solver
+
+Headers live under `rapide/maximal/`; the namespace is `rapide::maximal`.
+Bodies are independent of joints. Add all bodies, then connect any pair with a
+joint; a loop needs no tree-cutting or special loop joint.
+
+```cpp
+#include "rapide/maximal/simulator.hpp"
+
+using namespace rapide::maximal;
+ModelBuilder builder;  // Body 0 is static world.
+auto link = builder.add_body("pendulum", 1.0, Mat3::Identity(), {{0.5, 0, 0}});
+builder.add_joint(JointType::Revolute, 0, link, {}, {{-0.5, 0, 0}});
+Simulator sim(builder.build());
+sim.gravity = {0, -9.81, 0};
+sim.step(0.001);
+```
+
+`add_body` accepts the authored body-origin pose and an optional local COM offset.
+Runtime poses locate the **COM in world coordinates**; orientation maps body axes
+to world axes. The six velocity components are `[omega_body; v_com_world]`.
+Inertia is constant in body axes, about the COM. External forces and COM torques
+are world-expressed. Joint frames and force attachment points use the authored
+body coordinates, and revolute/prismatic axes are frame-local +Z.
+
+`Simulator::step(dt, forces)` holds those forces constant over the step. Alternatively,
+`set_force_callback` evaluates forces from the current model and state. Helpers in
+`forces.hpp` apply point springs, joint efforts, and scalar joint springs. Revolute
+spring coordinates are wrapped to [-pi, pi]; multi-turn springs need an unwrapped
+coordinate maintained by the caller.
+
+Each step predicts unconstrained velocity, solves bilateral constraint impulses,
+integrates poses, then projects position and velocity. The solve uses mass-scaled
+constraint rows and complete orthogonal decomposition, accommodating redundant rows
+without silently softening joints. Initial configurations are assembled through the
+same projection. `set_state` and `step` leave the simulator unchanged on failure.
+
+`report()` exposes numerical rank, row count, projection iterations, and maximum
+position, orientation, and velocity residuals. `constraint_impulses` come from the
+pre-integration velocity solve; `projection_impulses` are separate numerical
+corrections. Redundant constraints can have nonunique reactions even when motion
+is unique. Residual tolerances are per component; angular residuals are in radians.
+
+The orientation residual uses a principal rotation logarithm, with a chart boundary
+at pi. Position projection is a local assembly method: supply a reasonable initial
+configuration. Singular linkage positions and inconsistent constraints can fail
+assembly. Explicit force integration and projection are first order; projection is
+not energy-preserving. Dense matrices prioritize small-mechanism correctness over
+large-scene throughput, and workspaces currently allocate during solves.
+
+### Closed-loop example
+
+`examples/models/four_bar.hpp` constructs a parallelogram with three moving bodies
+and four hinges. Its 20 constraint rows have rank 17, leaving one degree of freedom.
+
+```bash
+./build/four_bar_rollout > four_bar.csv
+```
+
+The five-second driven rollout reports loop errors and rank. Tests also compare its
+motion against the analytic effective inertia and check timestep convergence.
+
+### Coal collision adapter
+
+Link `rapide_collision` and include `rapide/collision/coal.hpp` to use the selected
+collision backend. `rapide::collision::World` owns geometry and a dynamic AABB tree.
+Attach a Coal primitive or convex geometry to a body with `add(body, geometry, pose)`.
+Static ground can be a `coal::Halfspace` attached to body 0. Queries update shape
+transforms from the supplied maximal state; they do not integrate or solve dynamics.
+
+By default, same-body, fixed-cluster, neighboring-cluster, and static-static pairs
+are filtered. `include`/`exclude` change the body-pair policy; same-body and
+static-static pairs remain excluded. A `World` is mutable and cannot be shared by
+concurrent queries; separate worlds can be used for independent simulations.
+
+Contacts contain body/collider IDs, authored-local witness points, a world midpoint,
+an A-to-B world normal, and a signed gap (negative penetration). Coal 3.0.3 is the
+tested API. `add_compliant_forces` adds equal-and-opposite penalty forces at the
+contact midpoint with regularized sliding friction. It does not provide static
+sticking or a persistent multi-point manifold. Stiffness/damping are per contact.
+The existing specialized tire model remains in the ABA motorcycle example.
 
 ## Architecture
+
+The following describes the retained ABA backend. The maximal backend is separate
+and uses `double`, independent body states, and graph constraints rather than
+scalar templates and generalized joint coordinates.
 
 ### Design principles
 
@@ -109,7 +201,29 @@ Tire contacts on rear and front wheel bodies. Gravity pre-applied as body forces
 
 ## Dependencies
 
+### Selected collision backend for the maximal-coordinate implementation
+
+[Coal](https://github.com/coal-library/coal) is the selected CPU collision backend
+and is linked through `rapide_collision`. The retained ABA simulator still uses
+its existing flat-ground tire calculation.
+
+- Reuse Coal's broad-phase acceleration and primitive/convex geometry queries.
+- Keep shape ownership, self-collision exclusions, and contact response in Rapide.
+- Normalize contact normals and signed gaps at the backend boundary.
+- Start with compliant tire/contact forces; hard-contact constraints are a later step.
+- Add multi-point contact processing if required; do not assume a pairwise query
+  supplies a persistent contact manifold.
+- Target CPU execution, with multithreading available where useful; no autodiff
+  requirement for this implementation.
+
+The [collision experiment](experiments/collision/README.txt) compares Coal and
+Bullet using Panda and A1 collision models, analytic contact checks, and scenes
+with up to 704 shapes. See the [results and decision](experiments/collision/REPORT.txt).
+
+### Current build dependencies
+
 - **Eigen 3.4+** — all linear algebra; autodiff via `Eigen::AutoDiffScalar`
+- **Coal 3.0.3+** — collision adapter (enabled by default)
 - **Catch2 v3** — unit tests
 - **CMake 3.20+**
 
@@ -120,3 +234,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build
 ```
+
+Use `-DCMAKE_PREFIX_PATH=/path/to/dependencies` for non-system installations.
+Set `-DRAPIDE_WITH_COAL=OFF` to build the joint/loop solver without collision support.
+Catch2 must be installed for CMake to register the test executables.

@@ -1,0 +1,112 @@
+Coal / Bullet CPU collision evaluation — 2026-11-20
+==================================================
+
+Decision: use Coal for Rapide's planned maximal-coordinate implementation.
+This decision was explicitly selected by the user after reviewing the results.
+Coal is exercised here, but not yet linked into Rapide's C++ simulator.
+
+Scope
+-----
+Actual local runs using Coal 3.0.3 and PyBullet 3.2.7 on macOS arm64.
+Panda: 11 convex collision shapes; A1: 22 primitive collision shapes.
+300 poses per robot, a ground slab, and a box obstacle. No dynamics integration.
+Raw data, source hashes, package versions, medians and p95s: results.json.
+Reproduction instructions and limitations: README.txt.
+
+Correctness observations
+------------------------
+- Zero collision/no-collision disagreements across the 600 sampled robot poses
+  for eligible pairs, using a penetration threshold of 10 micrometres.
+- Zero candidate-filter misses against the exhaustive detected penetrations.
+- Panda: 15 self-collision pair observations, 420 environment pair observations.
+- A1: 84 self-collision pair observations, 485 environment pair observations.
+  These count pair/frame observations, not unique pairs or unique robot states.
+- Sphere/slab and box/slab checks matched the analytic 5 mm penetration.
+- A separated sphere produced no contacts in either backend.
+- In a 101-pose sliding box/slab check, maximum depth error was about 1e-11 m
+  and maximum normal error about 5.2e-14. This is a simple analytic case, not a
+  general numerical-accuracy bound for arbitrary convex geometry.
+
+Contact quality
+---------------
+Coal returned one contact for the box/slab pair. Bullet's closest-points query
+also returned one, while Bullet's persistent manifold returned four throughout
+the sliding-box test. Bullet therefore provides additional contact-management
+machinery useful for physical support. This experiment did not simulate stacking
+or prove that either backend produces stable dynamics.
+
+Coal 3.0.3 stores negative penetration in Contact.penetration_depth. Its normal
+points from A to B, whereas Bullet's normal-on-B points toward A. The adapter
+normalizes these conventions before comparison. Pin and test the chosen API.
+
+Candidate filtering (median pairs per pose)
+------------------------------------------
+Model    Eligible pairs    AABB sweep candidates    Bounding-sphere candidates
+Panda                64                        5                           16
+A1                  234                        4                           39
+
+These totals include the environment. A single sphere around the large ground
+slab is deliberately a poor fit, so the totals do not establish that spheres
+are universally worse. Robot self-pairs alone give:
+
+Model    AABB candidates    Bounding-sphere candidates
+Panda                  4                            3
+A1                     1                            8
+
+Conclusion: use shape-appropriate conservative bounds. Single bounding spheres
+are reasonable for some compact geometry but loose around long links. Capsule
+fitting and multiple-sphere approximations were not tested.
+
+CPU timings — native whole-scene passes (median milliseconds)
+-----------------------------------------------------------
+A1 copies    Shapes    Possible pairs       Coal       Bullet
+        1        22               231      0.0245      0.0400
+        8       176            15,400      0.1741      0.3567
+       32       704           247,456      0.6575      1.3134
+
+These passes include the libraries' native broad phase and collision queries,
+exclude Python pose updates and dynamics, and do not apply the explicit robot
+pair-exclusion policy. Coal timing includes its manager.update call; API update
+boundaries differ. Instances are separated and translated coherently, making
+this a sparse-scene test rather than a dense pile or articulated-motion test.
+
+The two backends do different amounts of contact work: at 32 instances Coal
+returned 416 contacts and Bullet returned 896. Do NOT interpret the timing ratio
+as an equal-work C++ speed ranking. Both have usable existing broad phases.
+
+Python pair-query timings (median milliseconds)
+----------------------------------------------
+Model    Coal exhaustive    Bullet exhaustive    Python sweep    Coal filtered
+Panda             0.3143               0.2697          0.1332           0.0308
+A1                0.6319               0.4150          0.2315           0.0145
+
+These include one Python call per pair and different request/result overhead.
+The custom sweep cost can dominate the remaining narrow phase. Native C++
+batching should be assessed before drawing throughput conclusions.
+
+Integration experience
+----------------------
+Coal and its dependencies installed from wheels without a source build.
+PyBullet required compiling from source for Python 3.13 on this Mac, and its
+bundled legacy zlib code incorrectly enabled a classic-Mac fdopen macro. After
+a targeted platform-condition patch, it built and passed the checks. This is
+not evidence that standalone BulletCollision has the same build problem.
+Neither library's standalone C++ integration was compiled in this experiment.
+
+Implementation direction
+------------------------
+1. Use Coal behind a small Rapide-owned collision adapter.
+2. Represent colliders independently from body inertia and visual geometry.
+3. Reuse Coal's dynamic AABB tree; maintain an explicit allowed/excluded-pair
+   policy for self-collision and environment interactions.
+4. Return collider/body IDs, local contact locations, world normal, and signed
+   gap using one documented Rapide convention.
+5. Keep tire/contact force laws in Rapide. Add contact caching/manifold generation
+   when required by the actual contact model; a single point is not a substitute
+   for a support patch in every situation.
+6. Profile native C++ integration before replacing the broad phase. No measured
+   need for a bespoke hierarchy emerged from these sparse scenes.
+
+This is a CPU design decision, not a single-thread-only design decision.
+No hard-contact solver, continuous collision detection, or general collision
+prevention guarantee was implemented by this experiment.

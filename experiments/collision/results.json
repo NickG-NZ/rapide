@@ -1,0 +1,275 @@
+{
+  "platform": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "packages": {
+    "coal": "3.0.3",
+    "pybullet": "3.2.7",
+    "numpy": "2.5.5",
+    "trimesh": "5.2.1"
+  },
+  "primitive_checks": [
+    {
+      "kind": "sphere",
+      "height": 0.095,
+      "expected_depth": 0.005,
+      "coal_depth": 0.0050000000000000044,
+      "bullet_depth": 0.0049999999999999906,
+      "coal_contacts": 1,
+      "bullet_closest_contacts": 1,
+      "bullet_manifold_contacts": 1
+    },
+    {
+      "kind": "box",
+      "height": 0.095,
+      "expected_depth": 0.005,
+      "coal_depth": 0.005000000009999991,
+      "bullet_depth": 0.004999999999994426,
+      "coal_contacts": 1,
+      "bullet_closest_contacts": 1,
+      "bullet_manifold_contacts": 4
+    },
+    {
+      "kind": "sphere",
+      "height": 0.11,
+      "expected_depth": 0.0,
+      "coal_depth": 0,
+      "bullet_depth": 0,
+      "coal_contacts": 0,
+      "bullet_closest_contacts": 0,
+      "bullet_manifold_contacts": 0
+    }
+  ],
+  "manifold_check": {
+    "frames": 101,
+    "coal_contact_counts": {
+      "median": 1.0,
+      "p95": 1.0,
+      "max": 1.0
+    },
+    "bullet_contact_counts": {
+      "median": 4.0,
+      "p95": 4.0,
+      "max": 4.0
+    },
+    "max_depth_error_m": 9.999991286424592e-12,
+    "max_normal_error": 5.189681498412439e-14
+  },
+  "robots": [
+    {
+      "model": "franka_panda/panda.urdf",
+      "robot_shapes": 11,
+      "allowed_pairs": 64,
+      "frames": 300,
+      "timings": {
+        "coal_all_pairs_ms": {
+          "median": 0.314333,
+          "p95": 0.49235445000000005,
+          "max": 0.647084
+        },
+        "bullet_all_pairs_ms": {
+          "median": 0.269708,
+          "p95": 0.351417,
+          "max": 0.493708
+        },
+        "custom_sweep_ms": {
+          "median": 0.13324999999999998,
+          "p95": 0.2577851,
+          "max": 3.318292
+        },
+        "coal_sweep_pairs_ms": {
+          "median": 0.030771,
+          "p95": 0.07752355000000001,
+          "max": 0.942834
+        },
+        "bullet_scene_detection_ms": {
+          "median": 0.2232295,
+          "p95": 0.29200865,
+          "max": 2.98625
+        },
+        "coal_scene_detection_ms": {
+          "median": 0.10043750000000001,
+          "p95": 0.16745240000000003,
+          "max": 0.552625
+        }
+      },
+      "aabb_candidates": {
+        "median": 5.0,
+        "p95": 9.050000000000011,
+        "max": 21.0
+      },
+      "sphere_candidates": {
+        "median": 16.0,
+        "p95": 20.0,
+        "max": 29.0
+      },
+      "coal_colliding_pairs": {
+        "median": 1.0,
+        "p95": 4.0,
+        "max": 11.0
+      },
+      "self_aabb_candidates": {
+        "median": 4.0,
+        "p95": 7.0,
+        "max": 10.0
+      },
+      "self_sphere_candidates": {
+        "median": 3.0,
+        "p95": 7.0,
+        "max": 11.0
+      },
+      "bullet_colliding_pairs": {
+        "median": 1.0,
+        "p95": 4.0,
+        "max": 11.0
+      },
+      "missed_candidates": 0,
+      "self_collision_observations": 15,
+      "environment_collision_observations": 420,
+      "disagreements": [],
+      "source_sha256": {
+        "franka_panda/panda.urdf": "9c27cf846302e26a1d3a44ccfd4dd2dbba89cccc9f17b96b6bd1f8bceedd1ff0",
+        "franka_panda/meshes/collision/link0.obj": "d29233f03537b6ee92a6861d4139290960325c2bacf9a640ab7935a5539c653f",
+        "franka_panda/meshes/collision/link1.obj": "0879335b20930eccccdc7d2565553895589f9125d4c8c0d462ad0f74f17e7472",
+        "franka_panda/meshes/collision/link2.obj": "cfca62e5846d3ba6db8be3740fc2219454401f1048db11a78bd9ec8f30cdc128",
+        "franka_panda/meshes/collision/link3.obj": "22235fb3676b5cb45a2f512065fab94fecf052a767cddfaed62cbb6d1efcf1f8",
+        "franka_panda/meshes/collision/link4.obj": "64b5914ef159149f87b767ff0eae4db41b9c267aecdddf2816ff25726fa0e6f2",
+        "franka_panda/meshes/collision/link5.obj": "ff8d4bb5ab506b8cf621f44b928be7714dff86b669a92909b8d4f71c5b01597e",
+        "franka_panda/meshes/collision/link6.obj": "e1dc8bbca8690944e6331f5a108d49c363eeec179b56a9f913541a541e6a2cfc",
+        "franka_panda/meshes/collision/link7.obj": "675a784e949b2b47894f1965016bd56b992b136bd90e1a62e832f49b4a55b240",
+        "franka_panda/meshes/collision/hand.obj": "a216bedc742a736f2c6cab010c6014475fe5f7b5ed53e371509adf885df618a2",
+        "franka_panda/meshes/collision/finger.obj": "c05dee2e2770ac3d45a097cec4a9d758e279ebdb7dc550eb249571c4690a6476"
+      }
+    },
+    {
+      "model": "a1/a1.urdf",
+      "robot_shapes": 22,
+      "allowed_pairs": 234,
+      "frames": 300,
+      "timings": {
+        "coal_all_pairs_ms": {
+          "median": 0.6319375,
+          "p95": 0.73738125,
+          "max": 0.82575
+        },
+        "bullet_all_pairs_ms": {
+          "median": 0.41500000000000004,
+          "p95": 0.48562055,
+          "max": 0.505291
+        },
+        "custom_sweep_ms": {
+          "median": 0.2315,
+          "p95": 0.31659555,
+          "max": 0.347333
+        },
+        "coal_sweep_pairs_ms": {
+          "median": 0.014479,
+          "p95": 0.0311732,
+          "max": 0.052375
+        },
+        "bullet_scene_detection_ms": {
+          "median": 0.0648745,
+          "p95": 0.07962915,
+          "max": 0.096917
+        },
+        "coal_scene_detection_ms": {
+          "median": 0.040354,
+          "p95": 0.057708,
+          "max": 0.078083
+        }
+      },
+      "aabb_candidates": {
+        "median": 4.0,
+        "p95": 8.0,
+        "max": 15.0
+      },
+      "sphere_candidates": {
+        "median": 39.0,
+        "p95": 46.05000000000001,
+        "max": 50.0
+      },
+      "coal_colliding_pairs": {
+        "median": 2.0,
+        "p95": 5.0,
+        "max": 6.0
+      },
+      "self_aabb_candidates": {
+        "median": 1.0,
+        "p95": 7.0,
+        "max": 13.0
+      },
+      "self_sphere_candidates": {
+        "median": 8.0,
+        "p95": 15.050000000000011,
+        "max": 19.0
+      },
+      "bullet_colliding_pairs": {
+        "median": 2.0,
+        "p95": 5.0,
+        "max": 6.0
+      },
+      "missed_candidates": 0,
+      "self_collision_observations": 84,
+      "environment_collision_observations": 485,
+      "disagreements": [],
+      "source_sha256": {
+        "a1/a1.urdf": "6250449e1f1703a04a863d948fa15d19706b12029272c7a86cedfdb1ee8ca8d8"
+      }
+    }
+  ],
+  "scaling": [
+    {
+      "copies": 1,
+      "shapes": 22,
+      "possible_pairs": 231,
+      "coal_scene_ms": {
+        "median": 0.0245,
+        "p95": 0.02858125,
+        "max": 0.02975
+      },
+      "bullet_scene_ms": {
+        "median": 0.039979,
+        "p95": 0.044843749999999995,
+        "max": 0.048708
+      },
+      "frames": 30,
+      "final_coal_contacts": 13,
+      "final_bullet_contacts": 28
+    },
+    {
+      "copies": 8,
+      "shapes": 176,
+      "possible_pairs": 15400,
+      "coal_scene_ms": {
+        "median": 0.1741045,
+        "p95": 0.1874814,
+        "max": 0.18875
+      },
+      "bullet_scene_ms": {
+        "median": 0.356729,
+        "p95": 0.38288125,
+        "max": 0.383958
+      },
+      "frames": 30,
+      "final_coal_contacts": 104,
+      "final_bullet_contacts": 224
+    },
+    {
+      "copies": 32,
+      "shapes": 704,
+      "possible_pairs": 247456,
+      "coal_scene_ms": {
+        "median": 0.657521,
+        "p95": 0.75276875,
+        "max": 0.809291
+      },
+      "bullet_scene_ms": {
+        "median": 1.313354,
+        "p95": 1.53961495,
+        "max": 1.55425
+      },
+      "frames": 30,
+      "final_coal_contacts": 416,
+      "final_bullet_contacts": 896
+    }
+  ]
+}
