@@ -4,10 +4,10 @@
 #include "rapide/model/model.hpp"
 #include "rapide/model/joint.hpp"
 #include "rapide/model/body.hpp"
-#include "vehicles/motorcycle.hpp"
+#include "examples/models/motorcycle.hpp"
 
 using namespace rapide;
-using namespace rapide::vehicles;
+using namespace rapide::examples;
 using S = double;
 using V3 = Eigen::Matrix<S,3,1>;
 

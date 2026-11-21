@@ -10,7 +10,7 @@ find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 # rapide is effectively header-only (algorithms are templated).
 # The library target exists for linking convenience and compile-flag propagation.
 add_library(rapide INTERFACE)
-target_include_directories(rapide INTERFACE include vehicles)
+target_include_directories(rapide INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_link_libraries(rapide INTERFACE Eigen3::Eigen)
 
 # Examples

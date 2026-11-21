@@ -5,7 +5,7 @@
 #include "rapide/math/se3.hpp"
 
 namespace rapide {
-namespace vehicles {
+namespace examples {
 
 // build_arm<S>() — construct an n-DOF serial revolute-joint arm.
 //
@@ -70,5 +70,5 @@ void attach_arm(ModelBuilder<S>& builder,
         X_parent);
 }
 
-}  // namespace vehicles
+}  // namespace examples
 }  // namespace rapide

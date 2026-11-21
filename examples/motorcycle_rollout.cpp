@@ -3,10 +3,10 @@
 #include <iostream>
 #include <iomanip>
 #include "rapide/simulator.hpp"
-#include "vehicles/motorcycle.hpp"
+#include "examples/models/motorcycle.hpp"
 
 using namespace rapide;
-using namespace rapide::vehicles;
+using namespace rapide::examples;
 using S = double;
 
 int main() {

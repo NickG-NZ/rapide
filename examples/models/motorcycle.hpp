@@ -8,7 +8,7 @@
 #include "rapide/simulator.hpp"
 
 namespace rapide {
-namespace vehicles {
+namespace examples {
 
 // ─── Parameters ──────────────────────────────────────────────────────────────
 
@@ -216,5 +216,5 @@ void attach_suspension(Simulator<S>&             sim,
                        SuspensionSpring<S>{p.suspension_k, p.suspension_c, S(0)});
 }
 
-}  // namespace vehicles
+}  // namespace examples
 }  // namespace rapide

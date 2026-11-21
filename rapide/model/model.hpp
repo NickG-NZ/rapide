@@ -46,7 +46,7 @@ template <typename S> struct Model {
     return q.segment(q_idx[i], joint_nq(joints[i]));
   }
 
-  // Slice of v (generalzied velocities) for joint i.
+  // Slice of v (generalized velocities) for joint i.
   Eigen::Ref<const Eigen::VectorX<S>> v_i(const Eigen::VectorX<S> &v,
                                           int i) const {
     return v.segment(v_idx[i], joint_nv(joints[i]));
@@ -67,9 +67,8 @@ template <typename S> struct Model {
   }
 };
 
-// ─── ModelBuilder
-// ───────────────────────────────────────────────────────────── Convenience
-// builder; avoids constructing the offsets manually.
+// ─── ModelBuilder ────────────────────────────────────────────────────────────
+// Convenience builder; avoids constructing the offsets manually.
 template <typename S> class ModelBuilder {
 public:
   ModelBuilder() {

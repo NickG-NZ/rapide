@@ -3,8 +3,6 @@
         {
             "name": "Mac",
             "includePath": [
-                "${workspaceFolder}/include",
-                "${workspaceFolder}/vehicles",
                 "${workspaceFolder}",
                 "/opt/homebrew/include/eigen3"
             ],

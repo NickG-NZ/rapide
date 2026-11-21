@@ -27,18 +27,18 @@ by design: every algorithm is templated on `Scalar` so autodiff types (e.g.
 4. **Joints via `std::variant`** — zero-overhead polymorphism, works cleanly with
    the scalar template. New joint types extend the variant.
 5. **`f_ext` assembly before ABA** — tire forces, gravity, and arm loads are
-   assembled into a `std::vector<Force6<S>>` (one per body) before the ABA call.
+   assembled into a `std::vector<Wrench<S>>` (one per body) before the ABA call.
    The algorithm itself is pure dynamics.
 
 ### Module map
 
 ```
-include/rapide/
+rapide/
 ├── math/
 │   ├── se3.hpp          SE3<S>: (R,p) rigid transform + spatial actions
-│   └── spatial.hpp      Motion6<S>, Force6<S>, SpatialInertia<S>
+│   └── spatial.hpp      Twist<S>, Wrench<S>, SpatialInertia<S>
 ├── model/
-│   ├── joint.hpp        FreeJoint<S>, RevoluteJoint<S>; Joint<S> = std::variant
+│   ├── joint.hpp        Free/Revolute/PrismaticJoint<S>, Joint<S> variant
 │   ├── body.hpp         Body<S>: name + SpatialInertia
 │   └── model.hpp        Model<S>: tree topology, bodies, joints, q/v offsets
 ├── algorithm/
@@ -52,14 +52,11 @@ include/rapide/
 ```
 
 ```
-src/
-├── algorithm/aba.cpp
-├── algorithm/kinematics.cpp
-└── contact/tire.cpp
-
-vehicles/
-├── motorcycle.hpp       build_motorcycle<S>() → Model<S>
-└── arm.hpp              build_arm<S>(n_dof) → Model<S>
+examples/
+├── motorcycle_rollout.cpp
+└── models/
+    ├── motorcycle.hpp   build_motorcycle<S>() → Model<S>
+    └── arm.hpp          build_arm<S>(n_dof) → Model<S>
 
 test/
 ├── test_se3.cpp
