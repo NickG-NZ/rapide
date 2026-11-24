@@ -1,0 +1,6 @@
+/build/
+/.venv/
+/.conan2/
+/CMakeUserPresets.json
+__pycache__/
+*.pyc

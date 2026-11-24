@@ -1,220 +1,139 @@
 #pragma once
-#include "rapide/model/model.hpp"
-#include "rapide/model/joint.hpp"
-#include "rapide/model/body.hpp"
-#include "rapide/math/se3.hpp"
 #include "rapide/contact/tire.hpp"
-#include "rapide/contact/suspension.hpp"
 #include "rapide/simulator.hpp"
+#include <numbers>
 
-namespace rapide {
-namespace examples {
+namespace rapide::examples {
 
-// ─── Parameters ──────────────────────────────────────────────────────────────
+template <typename S> struct MotorcycleParams {
+  // Chassis
+  S chassis_mass = S(180);
+  Eigen::Matrix<S, 3, 3> chassis_I =
+      (Eigen::Matrix<S, 3, 3>() << S(20), S(0), S(0), S(0), S(80), S(0), S(0),
+       S(0), S(80))
+          .finished();
+  Eigen::Matrix<S, 3, 1> chassis_com{S(0.7), S(0),
+                                     S(0.1)}; // forward of rear axle, above
 
-template<typename S>
-struct MotorcycleParams {
-    // Chassis
-    S chassis_mass = S(180);
-    Eigen::Matrix<S,3,3> chassis_I = (Eigen::Matrix<S,3,3>() <<
-        S(20), S(0), S(0),
-        S(0), S(80), S(0),
-        S(0), S(0), S(80)
-    ).finished();
-    Eigen::Matrix<S,3,1> chassis_com{S(0.7), S(0), S(0.1)};  // forward of rear axle, above
+  // Wheels (identical front/rear for v1)
+  S wheel_mass = S(15);
+  S wheel_radius = S(0.3);
+  Eigen::Matrix<S, 3, 3> wheel_I =
+      (Eigen::Matrix<S, 3, 3>() << S(0.5), S(0), S(0), S(0), S(1.0), S(0), S(0),
+       S(0), S(1.0))
+          .finished();
 
-    // Wheels (identical front/rear for v1)
-    S wheel_mass   = S(15);
-    S wheel_radius = S(0.3);
-    Eigen::Matrix<S,3,3> wheel_I = (Eigen::Matrix<S,3,3>() <<
-        S(0.5), S(0), S(0),
-        S(0), S(1.0), S(0),
-        S(0), S(0), S(1.0)
-    ).finished();
+  // Geometry
+  S wheelbase = S(1.4); // rear-to-front axle distance
 
-    // Geometry
-    S wheelbase    = S(1.4);   // rear-to-front axle distance
+  // Suspension (only used when has_suspension = true)
+  bool has_suspension = false;
+  S fork_mass = S(4);        // mass of each slider/fork body [kg]
+  S suspension_k = S(25000); // spring stiffness [N/m]
+  S suspension_c = S(1500);  // damping [N·s/m]
 
-    // Suspension (only used when has_suspension = true)
-    bool has_suspension = false;
-    S fork_mass        = S(4);    // mass of each slider/fork body [kg]
-    S suspension_k     = S(25000); // spring stiffness [N/m]
-    S suspension_c     = S(1500);  // damping [N·s/m]
-
-    // Tire contact
-    S tire_k_n = S(1e5);   // normal stiffness [N/m]
-    S tire_c_n = S(1e3);   // normal damping [N·s/m]
-    S tire_mu  = S(0.8);   // friction coefficient
+  // Tire contact
+  S tire_k_n = S(1e5); // normal stiffness [N/m]
+  S tire_c_n = S(1e3); // normal damping [N·s/m]
+  S tire_mu = S(0.8);  // friction coefficient
 };
 
-// ─── Build result ─────────────────────────────────────────────────────────────
-
-template<typename S>
-struct MotorcycleModel {
-    Model<S> model;
-    int rear_wheel_body  = -1;
-    int front_wheel_body = -1;
-    int rear_fork_joint  = -1;   // PrismaticJoint index (suspension only)
-    int front_fork_joint = -1;   // PrismaticJoint index (suspension only)
+template <typename S> struct MotorcycleModel {
+  Model model;
+  BodyId rear_wheel_body, front_wheel_body;
+  JointId rear_wheel_joint, front_wheel_joint;
+  JointId rear_fork_joint = -1, front_fork_joint = -1;
 };
 
-// ─── Topology without suspension ──────────────────────────────────────────────
-//
-//   world → chassis [FreeJoint]
-//           ├── rear_wheel  [RevoluteJoint, +Y]
-//           └── front_wheel [RevoluteJoint, +Y]
-//
-template<typename S>
-MotorcycleModel<S> build_motorcycle(const MotorcycleParams<S>& p = {}) {
-    ModelBuilder<S> builder;
-
-    // Chassis
-    int chassis_idx = builder.add_body(
-        Body<S>::with_inertia("chassis", p.chassis_mass, p.chassis_com, p.chassis_I),
-        FreeJoint<S>{},
-        /*parent=*/0,
-        SE3<S>::Identity());
-
-    // Rear wheel — joint predecessor at rear axle (chassis origin)
-    int rear_wheel_idx = builder.add_body(
-        Body<S>::with_inertia("rear_wheel", p.wheel_mass,
-                               Eigen::Matrix<S,3,1>::Zero(), p.wheel_I),
-        RevoluteJoint<S>{Eigen::Matrix<S,3,1>(S(0), S(1), S(0))},
-        chassis_idx,
-        SE3<S>::Identity());
-
-    // Front wheel — joint predecessor at front axle (wheelbase forward)
-    int front_wheel_idx = builder.add_body(
-        Body<S>::with_inertia("front_wheel", p.wheel_mass,
-                               Eigen::Matrix<S,3,1>::Zero(), p.wheel_I),
-        RevoluteJoint<S>{Eigen::Matrix<S,3,1>(S(0), S(1), S(0))},
-        chassis_idx,
-        SE3<S>{Eigen::Matrix<S,3,3>::Identity(),
-               Eigen::Matrix<S,3,1>(p.wheelbase, S(0), S(0))});
-
-    MotorcycleModel<S> mm;
-    mm.model            = builder.build();
-    mm.rear_wheel_body  = rear_wheel_idx;
-    mm.front_wheel_body = front_wheel_idx;
-    return mm;
+template <typename S>
+MotorcycleModel<S> build_motorcycle(const MotorcycleParams<S> &p = {}) {
+  ModelBuilder builder;
+  const double radius = double(p.wheel_radius);
+  const auto chassis = builder.add_body(
+      "chassis", double(p.chassis_mass), p.chassis_I.template cast<double>(),
+      {{0, 0, radius}}, p.chassis_com.template cast<double>());
+  const auto hinge = rotation_increment(Vec3{-std::numbers::pi / 2, 0, 0});
+  MotorcycleModel<S> result;
+  for (int i = 0; i < 2; ++i) {
+    const double x = i ? double(p.wheelbase) : 0;
+    BodyId parent = chassis;
+    Pose wheel_frame{{x, 0, 0}, hinge};
+    JointId fork = -1;
+    if (p.has_suspension) {
+      parent = builder.add_body(i ? "front_slider" : "rear_slider",
+                                double(p.fork_mass), .01 * Mat3::Identity(),
+                                {{x, 0, radius}});
+      fork = builder.add_joint(JointType::Prismatic, chassis, parent,
+                               {{x, 0, 0}}, {});
+      wheel_frame.position.setZero();
+    }
+    const auto wheel =
+        builder.add_body(i ? "front_wheel" : "rear_wheel", double(p.wheel_mass),
+                         p.wheel_I.template cast<double>(), {{x, 0, radius}});
+    const auto joint = builder.add_joint(JointType::Revolute, parent, wheel,
+                                         wheel_frame, {{0, 0, 0}, hinge});
+    if (i) {
+      result.front_wheel_body = wheel;
+      result.front_wheel_joint = joint;
+      result.front_fork_joint = fork;
+    } else {
+      result.rear_wheel_body = wheel;
+      result.rear_wheel_joint = joint;
+      result.rear_fork_joint = fork;
+    }
+  }
+  result.model = builder.build();
+  return result;
 }
 
-// ─── Topology with suspension ─────────────────────────────────────────────────
-//
-//   world → chassis [FreeJoint]
-//           ├── rear_slider  [PrismaticJoint, +Z in chassis]
-//           │   └── rear_wheel  [RevoluteJoint, +Y]
-//           └── front_slider [PrismaticJoint, +Z in chassis]
-//               └── front_wheel [RevoluteJoint, +Y]
-//
-// q > 0 = fork compressed (wheel moves toward chassis along +Z).
-// Spring rest position q0 = 0 (no preload; settles under gravity).
-//
-template<typename S>
-MotorcycleModel<S> build_motorcycle_suspended(const MotorcycleParams<S>& p = {}) {
-    ModelBuilder<S> builder;
-    Eigen::Matrix<S,3,1> fork_axis{S(0), S(0), S(1)};  // +Z in chassis frame
-
-    // Chassis
-    int chassis_idx = builder.add_body(
-        Body<S>::with_inertia("chassis", p.chassis_mass, p.chassis_com, p.chassis_I),
-        FreeJoint<S>{},
-        0, SE3<S>::Identity());
-
-    // ── Rear suspension + wheel ───────────────────────────────────────────────
-    // Slider: light unsprung mass representing the rear shock linkage.
-    int rear_slider_body = builder.add_body(
-        Body<S>::with_inertia("rear_slider", p.fork_mass,
-                               Eigen::Matrix<S,3,1>::Zero(),
-                               Eigen::Matrix<S,3,3>::Identity() * S(0.01)),
-        PrismaticJoint<S>{fork_axis},
-        chassis_idx,
-        SE3<S>::Identity());   // rear axle at chassis origin
-    int rear_fork_joint = rear_slider_body - 1;  // joint index = child_body - 1
-
-    int rear_wheel_idx = builder.add_body(
-        Body<S>::with_inertia("rear_wheel", p.wheel_mass,
-                               Eigen::Matrix<S,3,1>::Zero(), p.wheel_I),
-        RevoluteJoint<S>{Eigen::Matrix<S,3,1>(S(0), S(1), S(0))},
-        rear_slider_body,
-        SE3<S>::Identity());
-
-    // ── Front suspension + wheel ──────────────────────────────────────────────
-    int front_slider_body = builder.add_body(
-        Body<S>::with_inertia("front_slider", p.fork_mass,
-                               Eigen::Matrix<S,3,1>::Zero(),
-                               Eigen::Matrix<S,3,3>::Identity() * S(0.01)),
-        PrismaticJoint<S>{fork_axis},
-        chassis_idx,
-        SE3<S>{Eigen::Matrix<S,3,3>::Identity(),
-               Eigen::Matrix<S,3,1>(p.wheelbase, S(0), S(0))});
-    int front_fork_joint = front_slider_body - 1;
-
-    int front_wheel_idx = builder.add_body(
-        Body<S>::with_inertia("front_wheel", p.wheel_mass,
-                               Eigen::Matrix<S,3,1>::Zero(), p.wheel_I),
-        RevoluteJoint<S>{Eigen::Matrix<S,3,1>(S(0), S(1), S(0))},
-        front_slider_body,
-        SE3<S>::Identity());
-
-    MotorcycleModel<S> mm;
-    mm.model            = builder.build();
-    mm.rear_wheel_body  = rear_wheel_idx;
-    mm.front_wheel_body = front_wheel_idx;
-    mm.rear_fork_joint  = rear_fork_joint;
-    mm.front_fork_joint = front_fork_joint;
-    return mm;
+template <typename S>
+MotorcycleModel<S> build_motorcycle_suspended(MotorcycleParams<S> p = {}) {
+  p.has_suspension = true;
+  return build_motorcycle(p);
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-// Initial state: upright, wheels at ground level (z = wheel_radius),
-// all joint angles = 0, velocities = 0.
-template<typename S>
-State<S> motorcycle_standing_state(const Model<S>& model, S wheel_radius = S(0.3)) {
-    State<S> s = model.zero_state();
-    // FreeJoint q slice: [qx, qy, qz, qw, px, py, pz]
-    // zero_state already sets qw=1; set pz = wheel_radius.
-    s.q(6) = wheel_radius;
-    return s;
+inline State motorcycle_standing_state(const Model &model,
+                                       double wheel_radius = .3) {
+  auto state = model.initial_state;
+  const auto &chassis = state.bodies.at(1);
+  const double origin_height =
+      (chassis.pose.position - chassis.pose.orientation * model.bodies[1].com)
+          .z();
+  for (size_t i = 0; i < model.bodies.size(); ++i) {
+    if (model.bodies[i].dynamic()) {
+      state.bodies[i].pose.position.z() += wheel_radius - origin_height;
+    }
+  }
+  return state;
 }
 
-// Wire tire contact forces for both wheels into a Simulator.
-// Call after building the simulator; the callback runs each step.
-template<typename S>
-void attach_tire_forces(Simulator<S>&          sim,
-                        const MotorcycleModel<S>& mm,
-                        const MotorcycleParams<S>& p)
-{
-    TireContact<S> rear_tire{p.wheel_radius, p.tire_k_n, p.tire_c_n, p.tire_mu};
-    TireContact<S> front_tire{p.wheel_radius, p.tire_k_n, p.tire_c_n, p.tire_mu};
-    const int ri = mm.rear_wheel_body;
-    const int fi = mm.front_wheel_body;
-
-    sim.set_force_callback([=](const Model<S>&, const State<S>&,
-                               const KinematicsData<S>& kd)
-        -> std::vector<Wrench<S>>
-    {
-        std::vector<Wrench<S>> f(kd.X_world.size(), Wrench<S>::Zero());
-        f[ri] = rear_tire .compute(kd.X_world[ri], kd.v_body[ri]);
-        f[fi] = front_tire.compute(kd.X_world[fi], kd.v_body[fi]);
-        return f;
-    });
+template <typename S>
+void attach_tire_forces(Simulator &sim, const MotorcycleModel<S> &bike,
+                        const MotorcycleParams<S> &p) {
+  const TireContact<double> tire{double(p.wheel_radius), double(p.tire_k_n),
+                                 double(p.tire_c_n), double(p.tire_mu)};
+  sim.set_force_callback([=](const Model &model, const State &state) {
+    auto forces = zero_forces(model);
+    for (auto body : {bike.rear_wheel_body, bike.front_wheel_body}) {
+      const auto &s = state.bodies[body];
+      const auto force =
+          tire.compute({s.pose.orientation.toRotationMatrix(), s.pose.position},
+                       {s.omega, s.pose.orientation.conjugate() * s.velocity});
+      forces[body] = {force.torque, force.force};
+    }
+    return forces;
+  });
 }
 
-// Wire suspension springs into a Simulator for the suspended topology.
-template<typename S>
-void attach_suspension(Simulator<S>&             sim,
-                       const MotorcycleModel<S>& mm,
-                       const MotorcycleParams<S>& p)
-{
-    if (mm.rear_fork_joint  >= 0)
-        sim.add_spring(mm.rear_fork_joint,
-                       SuspensionSpring<S>{p.suspension_k, p.suspension_c, S(0)});
-    if (mm.front_fork_joint >= 0)
-        sim.add_spring(mm.front_fork_joint,
-                       SuspensionSpring<S>{p.suspension_k, p.suspension_c, S(0)});
+template <typename S>
+void attach_suspension(Simulator &sim, const MotorcycleModel<S> &bike,
+                       const MotorcycleParams<S> &p) {
+  for (auto joint : {bike.rear_fork_joint, bike.front_fork_joint}) {
+    if (joint >= 0) {
+      sim.add_joint_spring(joint, double(p.suspension_k),
+                           double(p.suspension_c), 0);
+    }
+  }
 }
 
-}  // namespace examples
-}  // namespace rapide
+} // namespace rapide::examples

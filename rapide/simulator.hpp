@@ -1,81 +1,122 @@
 #pragma once
-#include <vector>
+#include "rapide/aba/backend.hpp"
+#include "rapide/maximal/backend.hpp"
 #include <functional>
-#include "rapide/model/model.hpp"
-#include "rapide/algorithm/aba.hpp"
-#include "rapide/algorithm/kinematics.hpp"
-#include "rapide/integrator/integrator.hpp"
-#include "rapide/contact/suspension.hpp"
-#include "rapide/math/spatial.hpp"
+#include <memory>
 
 namespace rapide {
 
-// ForceCallback — called each step; returns external forces per body in WORLD frame.
-template<typename S>
-using ForceCallback = std::function<
-    std::vector<Wrench<S>>(const Model<S>&, const State<S>&, const KinematicsData<S>&)
->;
+using ForceCallback = std::function<Forces(const Model &, const State &)>;
 
-// TauCallback — called each step; returns full generalised-force vector (nv-dim).
-// Its result is ADDED to the constant tau and spring contributions.
-template<typename S>
-using TauCallback = std::function<Eigen::VectorX<S>(const Model<S>&, const State<S>&)>;
-
-template<typename S>
 class Simulator {
 public:
-    Eigen::Matrix<S,3,1> gravity{S(0), S(0), S(-9.81)};
-    S time = S(0);
+  Vec3 gravity{0, 0, -9.81};
 
-    explicit Simulator(Model<S> model)
-        : model_(std::move(model))
-        , state_(model_.zero_state())
-        , const_tau_(Eigen::VectorX<S>::Zero(model_.nv))
-    {}
+  /** Initialize from model.initial_state using the selected backend's policy:
+   *  maximal projects joint constraints; ABA requires a compatible tree state.
+   */
+  explicit Simulator(Model model, Backend backend = Backend::Maximal,
+                     SolverOptions options = {})
+      : Simulator(std::move(model), make_backend(backend), options) {}
 
-    const Model<S>& model()  const { return model_; }
-    const State<S>& state()  const { return state_; }
-    void set_state(State<S> s)     { state_ = std::move(s); }
+  Simulator(Model model, SolverOptions options)
+      : Simulator(std::move(model), Backend::Maximal, options) {}
 
-    // Constant generalised torques (overwritten each call; not accumulated).
-    void set_tau(Eigen::VectorX<S> tau) { const_tau_ = std::move(tau); }
-
-    // Passive spring on a specific joint (accumulated across calls).
-    void add_spring(int joint_idx, SuspensionSpring<S> spring) {
-        springs_.push_back({joint_idx, std::move(spring)});
+  Simulator(Model model, std::unique_ptr<SimulationBackend> backend,
+            SolverOptions options = {})
+      : model_(std::move(model)), backend_(std::move(backend)) {
+    if (!backend_) {
+      throw std::invalid_argument("Simulator needs a backend");
     }
+    model_.validate();
+    backend_->setup(model_, options);
+  }
 
-    // Active tau callback (replaces any previously set callback).
-    void set_tau_callback(TauCallback<S> cb) { tau_cb_ = std::move(cb); }
+  const Model &model() const { return model_; }
+  const State &state() const { return backend_->state(); }
+  const StepReport &report() const { return backend_->report(); }
+  double time() const { return time_; }
+  /** Replace body state using the backend's initialization policy. Simulation
+   *  time is unchanged; failed assignments preserve the current state. */
+  void set_state(State state) { backend_->set_state(std::move(state)); }
+  void set_force_callback(ForceCallback callback) {
+    callback_ = std::move(callback);
+  }
 
-    // External-force callback (replaces any previously set callback).
-    void set_force_callback(ForceCallback<S> cb) { force_cb_ = std::move(cb); }
-
-    // Advance by dt seconds using semi-implicit Euler.
-    void step(S dt) {
-        KinematicsData<S> kd = forward_kinematics(model_, state_);
-
-        // Assemble external forces.
-        std::vector<Wrench<S>> f_ext(model_.num_bodies(), Wrench<S>::Zero());
-        if (force_cb_) f_ext = force_cb_(model_, state_, kd);
-
-        // Assemble tau: constant + springs + callback.
-        Eigen::VectorX<S> tau = const_tau_;
-        apply_springs(springs_, model_, state_, tau);
-        if (tau_cb_) tau += tau_cb_(model_, state_);
-
-        Eigen::VectorX<S> ddq = forward_dynamics(model_, state_, tau, f_ext, gravity);
-        state_ = euler_step(model_, state_, ddq, dt);
-        time += dt;
+  void set_joint_effort(JointId joint, double effort) {
+    joint_position(model_, state(), joint);
+    if (!std::isfinite(effort)) {
+      throw std::invalid_argument("Nonfinite effort");
     }
+    if (efforts_.empty()) {
+      efforts_.resize(model_.joints.size());
+    }
+    efforts_[joint] = effort;
+  }
+
+  void add_joint_spring(JointId joint, double stiffness, double damping,
+                        double rest) {
+    auto check = zero_forces(model_);
+    rapide::add_joint_spring(model_, state(), check, joint, stiffness, damping,
+                             rest);
+    springs_.push_back({joint, stiffness, damping, rest});
+  }
+
+  StepReport step(double dt) {
+    auto forces = callback_ ? callback_(model_, state()) : zero_forces(model_);
+    if (forces.size() != model_.bodies.size()) {
+      throw std::invalid_argument("Force count does not match model");
+    }
+    for (size_t i = 0; i < efforts_.size(); ++i) {
+      if (efforts_[i] != 0) {
+        add_joint_effort(model_, state(), forces, static_cast<int>(i),
+                         efforts_[i]);
+      }
+    }
+    for (const auto &spring : springs_) {
+      rapide::add_joint_spring(model_, state(), forces, spring.joint,
+                               spring.stiffness, spring.damping, spring.rest);
+    }
+    return step(dt, forces);
+  }
+
+  StepReport step(double dt, const Forces &forces) {
+    if (!std::isfinite(dt) || dt <= 0 || !gravity.allFinite()) {
+      throw std::invalid_argument("Invalid timestep or gravity");
+    }
+    if (forces.size() != model_.bodies.size()) {
+      throw std::invalid_argument("Force count does not match model");
+    }
+    for (const auto &force : forces) {
+      if (!force.force.allFinite() || !force.torque.allFinite()) {
+        throw std::invalid_argument("Nonfinite force");
+      }
+    }
+    const auto report = backend_->advance(dt, forces, gravity);
+    time_ += dt;
+    return report;
+  }
 
 private:
-    Model<S>                    model_;
-    State<S>                    state_;
-    Eigen::VectorX<S>           const_tau_;
-    std::vector<JointSpring<S>> springs_;
-    TauCallback<S>              tau_cb_;
-    ForceCallback<S>            force_cb_;
+  static std::unique_ptr<SimulationBackend> make_backend(Backend backend) {
+    switch (backend) {
+    case Backend::ABA:
+      return std::make_unique<aba::ABABackend>();
+    case Backend::Maximal:
+      return std::make_unique<maximal::MaximalBackend>();
+    }
+    throw std::invalid_argument("Unknown backend");
+  }
+  struct JointSpring {
+    JointId joint;
+    double stiffness, damping, rest;
+  };
+  std::vector<JointSpring> springs_;
+  std::vector<double> efforts_;
+  Model model_;
+  std::unique_ptr<SimulationBackend> backend_;
+  ForceCallback callback_;
+  double time_ = 0;
 };
 
-}  // namespace rapide
+} // namespace rapide

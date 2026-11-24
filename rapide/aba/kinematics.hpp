@@ -1,9 +1,9 @@
 #pragma once
+#include "rapide/aba/tree_data.hpp"
 #include "rapide/math/se3.hpp"
-#include "rapide/model/model.hpp"
 #include <vector>
 
-namespace rapide {
+namespace rapide::aba {
 
 // Forward kinematics: compute SE3 pose of every body in world frame.
 //
@@ -18,8 +18,8 @@ template <typename S> struct KinematicsData {
 };
 
 template <typename S>
-KinematicsData<S> forward_kinematics(const Model<S> &model,
-                                     const State<S> &state) {
+KinematicsData<S> forward_kinematics(const TreeData<S> &model,
+                                     const JointState<S> &state) {
   const int nb = model.num_bodies();
   KinematicsData<S> kd;
   kd.X_world.resize(nb, SE3<S>::Identity());
@@ -36,6 +36,8 @@ KinematicsData<S> forward_kinematics(const Model<S> &model,
           if constexpr (std::is_same_v<JT, FreeJoint<S>>) {
             Eigen::Matrix<S, 7, 1> qi = model.q_i(state.q, i);
             return jt.X_J(qi);
+          } else if constexpr (std::is_same_v<JT, FixedJoint<S>>) {
+            return jt.X_J();
           } else {
             return jt.X_J(state.q(model.q_idx[i]));
           }
@@ -53,6 +55,8 @@ KinematicsData<S> forward_kinematics(const Model<S> &model,
           if constexpr (std::is_same_v<JT, FreeJoint<S>>) {
             Eigen::Matrix<S, 6, 1> vi = model.v_i(state.v, i);
             return jt.vJ(vi);
+          } else if constexpr (std::is_same_v<JT, FixedJoint<S>>) {
+            return Twist<S>::Zero();
           } else {
             return jt.vJ(state.v(model.v_idx[i]));
           }
@@ -70,4 +74,4 @@ KinematicsData<S> forward_kinematics(const Model<S> &model,
   return kd;
 }
 
-} // namespace rapide
+} // namespace rapide::aba

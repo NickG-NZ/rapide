@@ -1,9 +1,9 @@
 #include "rapide/collision/coal.hpp"
-#include "rapide/maximal/simulator.hpp"
+#include "rapide/simulator.hpp"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-using namespace rapide::maximal;
+using namespace rapide;
 namespace collision = rapide::collision;
 using Catch::Approx;
 
@@ -63,15 +63,17 @@ TEST_CASE("Maximal body lands on Coal ground and can leave it") {
                                     {10000, 100, .5, .01});
     return f;
   });
-  for (int i = 0; i < 3000; ++i)
+  for (int i = 0; i < 3000; ++i) {
     sim.step(.0005);
+  }
   REQUIRE(sim.state().bodies[ball].pose.position.z() ==
           Approx(.1 - 9.81 / 10000).margin(1e-5));
   auto state = sim.state();
   state.bodies[ball].velocity.z() = 2;
   sim.set_state(state);
-  for (int i = 0; i < 100; ++i)
+  for (int i = 0; i < 100; ++i) {
     sim.step(.0005);
+  }
   REQUIRE(sim.state().bodies[ball].pose.position.z() > .15);
   REQUIRE(world.contacts(sim.state()).empty());
 }

@@ -1,28 +1,17 @@
 #pragma once
+#include "rapide/math/pose.hpp"
 #include <string>
-#include "rapide/math/spatial.hpp"
 
 namespace rapide {
-
-template<typename S>
+using BodyId = int;
 struct Body {
-    std::string      name;
-    SpatialInertia<S> inertia;
-
-    // Convenience: create a point-mass body.
-    static Body point_mass(std::string name, S mass, Eigen::Matrix<S,3,1> com_in_body) {
-        return {
-            std::move(name),
-            {mass, com_in_body, Eigen::Matrix<S,3,3>::Zero()}
-        };
-    }
-
-    // Create body with full inertia specification.
-    static Body with_inertia(std::string name, S mass,
-                              Eigen::Matrix<S,3,1> com_in_body,
-                              Eigen::Matrix<S,3,3> I_about_com) {
-        return {std::move(name), {mass, com_in_body, I_about_com}};
-    }
+  std::string name;
+  double mass = 0;
+  Mat3 inertia = Mat3::Zero();
+  Mat3 inverse_inertia = Mat3::Zero();
+  Vec3 com = Vec3::Zero();
+  int velocity_offset = -1;
+  bool dynamic() const { return velocity_offset >= 0; }
 };
 
-}  // namespace rapide
+} // namespace rapide

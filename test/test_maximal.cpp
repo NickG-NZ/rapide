@@ -1,11 +1,54 @@
 #include "examples/models/four_bar.hpp"
-#include "rapide/maximal/simulator.hpp"
+#include "rapide/simulator.hpp"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
+#include <numbers>
 
+using namespace rapide;
 using namespace rapide::maximal;
 using Catch::Approx;
+
+TEST_CASE("Vertical four-bar settles under gravity with a fixed chassis") {
+  const Pose mount{{0, 0, .8},
+                   rotation_increment(Vec3{std::numbers::pi / 2, 0, 0})};
+  const auto mechanism = rapide::examples::build_four_bar(.9, mount);
+  const auto spring = rapide::examples::four_bar_spring(mechanism);
+  Simulator sim(mechanism.model);
+  sim.set_force_callback([spring](const Model &m, const State &s) {
+    auto forces = zero_forces(m);
+    add_spring(m, s, forces, spring);
+    return forces;
+  });
+  for (int i = 0; i < 5000; ++i) {
+    const auto report = sim.step(.002);
+    REQUIRE(report.position_error < 1e-9);
+    REQUIRE(report.orientation_error < 1e-9);
+    REQUIRE(report.rank == 17);
+    for (auto body : {mechanism.crank, mechanism.coupler, mechanism.follower}) {
+      const auto &s = sim.state().bodies[body];
+      REQUIRE(std::abs(s.pose.position.y()) < 1e-8);
+      REQUIRE(std::abs(s.velocity.y()) < 1e-8);
+      const Vec3 omega = s.pose.orientation * s.omega;
+      REQUIRE(std::abs(omega.x()) + std::abs(omega.z()) < 1e-8);
+    }
+  }
+  const double angle =
+      joint_position(sim.model(), sim.state(), mechanism.drive);
+  REQUIRE(angle < .75);
+  const double length = std::sqrt(1.25 - std::cos(angle));
+  const double spring_torque = spring.stiffness *
+                               (spring.rest_length - length) * .5 *
+                               std::sin(angle) / length;
+  REQUIRE(std::abs(spring_torque - 3 * 9.81 * std::cos(angle)) < 1e-4);
+  REQUIRE(std::abs(joint_velocity(sim.model(), sim.state(), mechanism.drive)) <
+          1e-5);
+  const auto &chassis = sim.state().bodies[mechanism.chassis];
+  REQUIRE((chassis.pose.position - mount.position).norm() == 0);
+  REQUIRE(chassis.pose.orientation.angularDistance(mount.orientation) < 1e-15);
+  REQUIRE(chassis.velocity.norm() == 0);
+  REQUIRE(chassis.omega.norm() == 0);
+}
 
 TEST_CASE("Maximal free body follows gravity and body-axis torque") {
   ModelBuilder b;
@@ -81,8 +124,9 @@ TEST_CASE("Maximal fixed joint assembles and supports an offset COM") {
       {{.01, -.02, .01}, rotation_increment(Vec3{.01, .02, -.03})}, com);
   b.add_joint(JointType::Fixed, 0, id);
   Simulator sim(b.build());
-  for (int i = 0; i < 100; ++i)
+  for (int i = 0; i < 100; ++i) {
     sim.step(.01);
+  }
   REQUIRE((sim.state().bodies[id].pose.position - com).norm() < 1e-9);
   REQUIRE(sim.state().bodies[id].velocity.norm() < 1e-10);
   REQUIRE(sim.report().rank == 6);
@@ -99,8 +143,9 @@ TEST_CASE("Maximal slider supports spring equilibrium and actuation") {
     add_joint_spring(m, s, f, j, 100, 5, .5962);
     return f;
   });
-  for (int i = 0; i < 100; ++i)
+  for (int i = 0; i < 100; ++i) {
     sim.step(.002);
+  }
   REQUIRE(joint_position(sim.model(), sim.state(), j) ==
           Approx(.4).margin(1e-10));
   REQUIRE(sim.report().rank == 5);
@@ -116,8 +161,9 @@ TEST_CASE("Maximal ball joint permits rotation while holding its anchor") {
   auto id = b.add_body("pendulum", 1, Mat3::Identity(), {{1, 0, 0}});
   b.add_joint(JointType::Ball, 0, id, {}, {{-1, 0, 0}});
   Simulator sim(b.build());
-  for (int i = 0; i < 1000; ++i)
+  for (int i = 0; i < 1000; ++i) {
     sim.step(.001);
+  }
   REQUIRE(world_point(sim.model(), sim.state(), id, Vec3{-1, 0, 0}).norm() <
           2e-9);
   REQUIRE(sim.state().bodies[id].pose.position.z() < -.1);
@@ -192,8 +238,9 @@ TEST_CASE("Maximal hinge rotates through full turns without locking") {
   auto state = sim.state();
   state.bodies[id].omega.z() = 4;
   sim.set_state(state);
-  for (int i = 0; i < 2000; ++i)
+  for (int i = 0; i < 2000; ++i) {
     sim.step(.002);
+  }
   REQUIRE(sim.state().bodies[id].omega.z() == Approx(4).margin(1e-9));
   REQUIRE(sim.state().bodies[id].pose.orientation.angularDistance(
               rotation_increment(Vec3{0, 0, 16})) < 1e-9);
@@ -225,4 +272,18 @@ TEST_CASE("Maximal inconsistent constraints report assembly failure") {
   REQUIRE_THROWS_AS(Simulator(b.build()), std::runtime_error);
   REQUIRE_THROWS_AS(b.add_body("invalid", 1, Mat3::Zero()),
                     std::invalid_argument);
+}
+
+TEST_CASE("Maximal builder accepts shared joint types and rejects unsupported "
+          "types") {
+  ModelBuilder builder;
+  const auto body = builder.add_body("body", 1, Mat3::Identity());
+  const auto joint = builder.add_joint(rapide::JointType::Ball, 0, body);
+  REQUIRE(JointConstraints(builder.build().joints[joint].type).rows() == 3);
+  REQUIRE_THROWS_AS(builder.add_joint(rapide::JointType::Free, 0, body),
+                    std::invalid_argument);
+  REQUIRE_THROWS_AS(
+      builder.add_joint(static_cast<rapide::JointType>(999), 0, body),
+      std::invalid_argument);
+  REQUIRE(builder.build().joints.size() == 1);
 }

@@ -1,133 +1,145 @@
 #pragma once
-#include <Eigen/Core>
-#include <Eigen/Geometry>
+#include "rapide/math/linalg.hpp"
 
 namespace rapide {
 
 // Twist — spatial motion vector [angular (ω); linear (v)].
 // Called "motion vector" in Featherstone's RBDA. Featherstone convention.
-template<typename S>
-struct Twist {
-    Eigen::Matrix<S,3,1> angular;
-    Eigen::Matrix<S,3,1> linear;
+template <typename S> struct Twist {
+  Eigen::Matrix<S, 3, 1> angular;
+  Eigen::Matrix<S, 3, 1> linear;
 
-    static Twist Zero() {
-        return {Eigen::Matrix<S,3,1>::Zero(), Eigen::Matrix<S,3,1>::Zero()};
-    }
+  static Twist Zero() {
+    return {Eigen::Matrix<S, 3, 1>::Zero(), Eigen::Matrix<S, 3, 1>::Zero()};
+  }
 
-    Twist operator+(const Twist& o) const { return {angular + o.angular, linear + o.linear}; }
-    Twist operator-(const Twist& o) const { return {angular - o.angular, linear - o.linear}; }
-    Twist& operator+=(const Twist& o) { angular += o.angular; linear += o.linear; return *this; }
-    Twist operator*(S s) const { return {angular * s, linear * s}; }
+  Twist operator+(const Twist &o) const {
+    return {angular + o.angular, linear + o.linear};
+  }
+  Twist operator-(const Twist &o) const {
+    return {angular - o.angular, linear - o.linear};
+  }
+  Twist &operator+=(const Twist &o) {
+    angular += o.angular;
+    linear += o.linear;
+    return *this;
+  }
+  Twist operator*(S s) const { return {angular * s, linear * s}; }
 
-    // Spatial cross product for motion × motion:  [this × m]
-    // (v₁ ×) v₂ = [ω₁×ω₂; ω₁×v₂ + v₁×ω₂]
-    Twist cross(const Twist& m) const {
-        return {
-            angular.cross(m.angular),
-            angular.cross(m.linear) + linear.cross(m.angular)
-        };
-    }
+  // Spatial cross product for motion × motion:  [this × m]
+  // (v₁ ×) v₂ = [ω₁×ω₂; ω₁×v₂ + v₁×ω₂]
+  Twist cross(const Twist &m) const {
+    return {angular.cross(m.angular),
+            angular.cross(m.linear) + linear.cross(m.angular)};
+  }
 };
 
 // Wrench — spatial force vector [torque (τ); force (f)].
 // Called "force vector" in Featherstone's RBDA. Dual to Twist.
-template<typename S>
-struct Wrench {
-    Eigen::Matrix<S,3,1> torque;
-    Eigen::Matrix<S,3,1> force;
+template <typename S> struct Wrench {
+  Eigen::Matrix<S, 3, 1> torque;
+  Eigen::Matrix<S, 3, 1> force;
 
-    static Wrench Zero() {
-        return {Eigen::Matrix<S,3,1>::Zero(), Eigen::Matrix<S,3,1>::Zero()};
-    }
+  static Wrench Zero() {
+    return {Eigen::Matrix<S, 3, 1>::Zero(), Eigen::Matrix<S, 3, 1>::Zero()};
+  }
 
-    Wrench operator+(const Wrench& o) const { return {torque + o.torque, force + o.force}; }
-    Wrench operator-(const Wrench& o) const { return {torque - o.torque, force - o.force}; }
-    Wrench& operator+=(const Wrench& o) { torque += o.torque; force += o.force; return *this; }
-    Wrench operator*(S s) const { return {torque * s, force * s}; }
+  Wrench operator+(const Wrench &o) const {
+    return {torque + o.torque, force + o.force};
+  }
+  Wrench operator-(const Wrench &o) const {
+    return {torque - o.torque, force - o.force};
+  }
+  Wrench &operator+=(const Wrench &o) {
+    torque += o.torque;
+    force += o.force;
+    return *this;
+  }
+  Wrench operator*(S s) const { return {torque * s, force * s}; }
 
-    S dot(const Twist<S>& m) const { return torque.dot(m.angular) + force.dot(m.linear); }
+  S dot(const Twist<S> &m) const {
+    return torque.dot(m.angular) + force.dot(m.linear);
+  }
 };
 
 // Dual cross product: motion acting on force   (v ×*) f
 // Used for ABA Coriolis bias:  p += v ×* I*v
-template<typename S>
-Wrench<S> cross_motion_force(const Twist<S>& v, const Wrench<S>& f) {
-    return {
-        v.angular.cross(f.torque) + v.linear.cross(f.force),
-        v.angular.cross(f.force)
-    };
+template <typename S>
+Wrench<S> cross_motion_force(const Twist<S> &v, const Wrench<S> &f) {
+  return {v.angular.cross(f.torque) + v.linear.cross(f.force),
+          v.angular.cross(f.force)};
 }
 
 // ─── Rigid-body spatial inertia ──────────────────────────────────────────────
 // Stored compactly as (mass, com, I_c). The 6×6 matrix is:
-//   [ I_c - m·c×², -m·c× ]
-//   [   m·c×,       m·I  ]
+//   [ I_c - m·c×², +m·c× ]
+//   [  -m·c×,       m·I  ]
 // where c× = skew(c). Never stored in that form; computed on demand.
-template<typename S>
-struct SpatialInertia {
-    S                      mass;
-    Eigen::Matrix<S,3,1>   com;   // centre of mass in body frame
-    Eigen::Matrix<S,3,3>   I_c;   // rotational inertia about CoM
+template <typename S> struct SpatialInertia {
+  S mass;
+  Eigen::Matrix<S, 3, 1> com; // centre of mass in body frame
+  Eigen::Matrix<S, 3, 3> I_c; // rotational inertia about CoM
 
-    // I * m — apply inertia to a motion vector, return a force vector.
-    // f_lin = m·(c×ω + v)
-    // f_ang = I_c·ω - c × f_lin
-    Wrench<S> apply(const Twist<S>& m) const {
-        Eigen::Matrix<S,3,1> f_lin = mass * (com.cross(m.angular) + m.linear);
-        Eigen::Matrix<S,3,1> f_ang = I_c * m.angular - com.cross(f_lin);
-        return {f_ang, f_lin};
-    }
+  // I * m — apply inertia to a motion vector, return a force vector.
+  // f_lin = m·(ω×c + v)
+  // f_ang = I_c·ω + c × f_lin
+  Wrench<S> apply(const Twist<S> &m) const {
+    Eigen::Matrix<S, 3, 1> f_lin = mass * (m.angular.cross(com) + m.linear);
+    Eigen::Matrix<S, 3, 1> f_ang = I_c * m.angular + com.cross(f_lin);
+    return {f_ang, f_lin};
+  }
 
-    // Materialise the 6×6 for validation or explicit Jacobians.
-    Eigen::Matrix<S,6,6> to_matrix() const {
-        const Eigen::Matrix<S,3,3> cx = skew(com);
-        Eigen::Matrix<S,6,6> M;
-        // Top-left:  I_c - m·cx²  = I_c + m·cx·cx^T
-        M.template topLeftCorner<3,3>()     = I_c - mass * cx * cx;
-        // Top-right: -m·cx
-        M.template topRightCorner<3,3>()    = -mass * cx;
-        // Bottom-left:  m·cx
-        M.template bottomLeftCorner<3,3>()  =  mass * cx;
-        // Bottom-right: m·I
-        M.template bottomRightCorner<3,3>() =  mass * Eigen::Matrix<S,3,3>::Identity();
-        return M;
-    }
+  // Materialise the 6×6 for validation or explicit Jacobians.
+  Eigen::Matrix<S, 6, 6> to_matrix() const {
+    const Eigen::Matrix<S, 3, 3> cx = skew(com);
+    Eigen::Matrix<S, 6, 6> M;
+    // Top-left:  I_c - m·cx²  = I_c + m·cx·cx^T
+    M.template topLeftCorner<3, 3>() = I_c - mass * cx * cx;
+    // Top-right: +m·cx
+    M.template topRightCorner<3, 3>() = mass * cx;
+    // Bottom-left: -m·cx
+    M.template bottomLeftCorner<3, 3>() = -mass * cx;
+    // Bottom-right: m·I
+    M.template bottomRightCorner<3, 3>() =
+        mass * Eigen::Matrix<S, 3, 3>::Identity();
+    return M;
+  }
 
-    static Eigen::Matrix<S,3,3> skew(const Eigen::Matrix<S,3,1>& v) {
-        Eigen::Matrix<S,3,3> m;
-        m <<  S(0), -v(2),  v(1),
-              v(2),  S(0), -v(0),
-             -v(1),  v(0),  S(0);
-        return m;
-    }
+  static Eigen::Matrix<S, 3, 3> skew(const Eigen::Matrix<S, 3, 1> &v) {
+    return rapide::skew(v);
+  }
 };
 
-// ─── Articulated-body inertia ─────────────────────────────────────────────────
-// Used internally by ABA. Cannot be stored compactly in general; full 6×6.
-template<typename S>
-struct ArticulatedInertia {
-    Eigen::Matrix<S,6,6> M;
+// ─── Articulated-body inertia
+// ───────────────────────────────────────────────── Used internally by ABA.
+// Cannot be stored compactly in general; full 6×6.
+template <typename S> struct ArticulatedInertia {
+  Eigen::Matrix<S, 6, 6> M;
 
-    static ArticulatedInertia Zero() {
-        ArticulatedInertia a;
-        a.M.setZero();
-        return a;
-    }
+  static ArticulatedInertia Zero() {
+    ArticulatedInertia a;
+    a.M.setZero();
+    return a;
+  }
 
-    ArticulatedInertia operator+(const ArticulatedInertia& o) const { return {M + o.M}; }
-    ArticulatedInertia& operator+=(const ArticulatedInertia& o) { M += o.M; return *this; }
+  ArticulatedInertia operator+(const ArticulatedInertia &o) const {
+    return {M + o.M};
+  }
+  ArticulatedInertia &operator+=(const ArticulatedInertia &o) {
+    M += o.M;
+    return *this;
+  }
 
-    Wrench<S> apply(const Twist<S>& m) const {
-        Eigen::Matrix<S,6,1> mv;
-        mv << m.angular, m.linear;
-        Eigen::Matrix<S,6,1> fv = M * mv;
-        return {fv.template head<3>(), fv.template tail<3>()};
-    }
+  Wrench<S> apply(const Twist<S> &m) const {
+    Eigen::Matrix<S, 6, 1> mv;
+    mv << m.angular, m.linear;
+    Eigen::Matrix<S, 6, 1> fv = M * mv;
+    return {fv.template head<3>(), fv.template tail<3>()};
+  }
 
-    static ArticulatedInertia from_rigid(const SpatialInertia<S>& I) {
-        return {I.to_matrix()};
-    }
+  static ArticulatedInertia from_rigid(const SpatialInertia<S> &I) {
+    return {I.to_matrix()};
+  }
 };
 
-}  // namespace rapide
+} // namespace rapide

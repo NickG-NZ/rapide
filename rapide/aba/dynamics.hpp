@@ -1,27 +1,28 @@
 #pragma once
+#include "rapide/aba/tree_data.hpp"
 #include "rapide/math/se3.hpp"
 #include "rapide/math/spatial.hpp"
-#include "rapide/model/model.hpp"
 #include <Eigen/Core>
 #include <Eigen/LU>
 #include <vector>
 
-namespace rapide {
+namespace rapide::aba {
 
-// forward_dynamics — Featherstone Articulated Body Algorithm (ABA).
-//
-// Returns ddq: generalised accelerations (nv-dimensional).
-//
-// f_ext: external forces per body in WORLD frame (index 0..nb-1).
-//        Wrench::Zero() for unloaded bodies.
-//        Gravity is handled via the base-acceleration trick — do NOT include
-//        it in f_ext.
-//
-// gravity: e.g. {0, 0, -9.81}.
+/** Return generalized accelerations using Featherstone's articulated-body
+ *  algorithm without forming a global mass matrix. A forward pass computes
+ *  transforms, velocities, and bias forces; a backward pass eliminates joint
+ *  accelerations and accumulates articulated inertias; a final forward pass
+ *  recovers accelerations from the root to the leaves.
+ *
+ *  tau contains generalized joint efforts. f_ext contains world-expressed
+ *  spatial wrenches about the world origin, indexed by body (including world).
+ *  Gravity enters through the base acceleration and must not also be in f_ext.
+ *  Floating joints are supported at roots; fixed joints propagate inertia
+ *  without adding generalized coordinates. */
 template <typename S>
 Eigen::VectorX<S> forward_dynamics(
-    const Model<S> &model, const State<S> &state, const Eigen::VectorX<S> &tau,
-    const std::vector<Wrench<S>> &f_ext,
+    const TreeData<S> &model, const JointState<S> &state,
+    const Eigen::VectorX<S> &tau, const std::vector<Wrench<S>> &f_ext,
     const Eigen::Matrix<S, 3, 1> &gravity = Eigen::Matrix<S, 3, 1>(S(0), S(0),
                                                                    S(-9.81))) {
   const int nb = model.num_bodies();
@@ -60,6 +61,9 @@ Eigen::VectorX<S> forward_dynamics(
             Eigen::Matrix<S, 6, 1> vi = model.v_i(state.v, i);
             X_J = jt.X_J(qi);
             vJ = jt.vJ(vi);
+          } else if constexpr (std::is_same_v<JT, FixedJoint<S>>) {
+            X_J = jt.X_J();
+            vJ = Twist<S>::Zero();
           } else {
             X_J = jt.X_J(state.q(model.q_idx[i]));
             vJ = jt.vJ(state.v(model.v_idx[i]));
@@ -96,6 +100,11 @@ Eigen::VectorX<S> forward_dynamics(
             u_vec[i] = tau.segment(model.v_idx[i], 6) - pA_vec;
             // I_A_bar = 0 → nothing propagates to parent (parent = world).
 
+          } else if constexpr (std::is_same_v<JT, FixedJoint<S>>) {
+            if (pi > 0) {
+              IA[pi] += X_up[i].transform_inertia(IA[bi]);
+              pA[pi] += X_up[i].act_on_force(pA[bi] + IA[bi].apply(c[i]));
+            }
           } else {
             // Generic 1-DOF: works for RevoluteJoint and PrismaticJoint alike.
             // Both provide S_times_v(1) and S_transpose_force().
@@ -157,6 +166,8 @@ Eigen::VectorX<S> forward_dynamics(
             a[bi].angular = a_before.angular + ddq_6.template head<3>();
             a[bi].linear = a_before.linear + ddq_6.template tail<3>();
 
+          } else if constexpr (std::is_same_v<JT, FixedJoint<S>>) {
+            a[bi] = a_before;
           } else {
             // Generic 1-DOF
             Eigen::Matrix<S, 6, 1> a_bv;
@@ -173,4 +184,4 @@ Eigen::VectorX<S> forward_dynamics(
   return ddq;
 }
 
-} // namespace rapide
+} // namespace rapide::aba

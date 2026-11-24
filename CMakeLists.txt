@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.23)
 project(rapide VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -15,7 +15,7 @@ target_link_libraries(rapide INTERFACE Eigen3::Eigen)
 
 option(RAPIDE_WITH_COAL "Build the Coal collision adapter and contact tests" ON)
 if(RAPIDE_WITH_COAL)
-    find_package(coal 3.0.3 REQUIRED)
+    find_package(coal 3.0.4 REQUIRED CONFIG)
     add_library(rapide_collision INTERFACE)
     target_link_libraries(rapide_collision INTERFACE rapide coal::coal)
 endif()
@@ -29,11 +29,19 @@ add_executable(four_bar_rollout examples/four_bar_rollout.cpp)
 target_link_libraries(four_bar_rollout PRIVATE rapide)
 target_compile_options(four_bar_rollout PRIVATE -Wall -Wextra)
 
+add_executable(wheel_rollout examples/wheel_rollout.cpp)
+target_link_libraries(wheel_rollout PRIVATE rapide)
+target_compile_options(wheel_rollout PRIVATE -Wall -Wextra)
+
+add_executable(bike_rollout examples/bike_rollout.cpp)
+target_link_libraries(bike_rollout PRIVATE rapide)
+target_compile_options(bike_rollout PRIVATE -Wall -Wextra)
+
 # Tests
-find_package(Catch2 3 QUIET)
-if(Catch2_FOUND)
-    enable_testing()
-    foreach(test se3 spatial aba tire maximal)
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Catch2 3 REQUIRED CONFIG)
+    foreach(test se3 spatial aba tire maximal planar_tire bike integration backends)
         add_executable(test_${test} test/test_${test}.cpp)
         target_link_libraries(test_${test} PRIVATE rapide Catch2::Catch2WithMain)
         target_compile_options(test_${test} PRIVATE -Wall -Wextra -O2)

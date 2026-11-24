@@ -3,10 +3,9 @@
         {
             "name": "Mac",
             "includePath": [
-                "${workspaceFolder}",
-                "/opt/homebrew/include/eigen3"
+                "${workspaceFolder}"
             ],
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "compileCommands": "${workspaceFolder}/build/Release/compile_commands.json",
             "cppStandard": "c++20",
             "macFrameworkPath": [
                 "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
