@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Multibody simulation for robotics, including kinematic loops.</strong>
+  <strong>Fast multibody simulation for robotics, including kinematic loops.</strong>
 </p>
 
 <p align="center">
