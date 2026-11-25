@@ -1,4 +1,6 @@
-<h1 align="center">rapide</h1>
+<p align="center">
+  <img width="100%" alt="rapide: a simulated bike with articulated suspension and a robot arm" src="docs/assets/rapide-banner.png">
+</p>
 
 <p align="center">
   <strong>Multibody physics for autonomous wheeled vehicles, in modern C++.</strong>
