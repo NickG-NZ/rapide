@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Multibody physics for autonomous wheeled vehicles, in modern C++.</strong>
+  <strong>Multibody simulation for robotics, including kinematic loops.</strong>
 </p>
 
 <p align="center">
@@ -15,9 +15,9 @@
 
 ## Overview
 
-**rapide** is a rigid multibody simulator built for wheeled robots and vehicles: chassis,
-suspension linkages, wheels and compliant tires. One authored model runs on two interchangeable
-backends:
+**rapide** is a rigid multibody simulator for robotics, written in C++20. Mechanisms are arbitrary
+joint graphs, so closed kinematic loops such as parallel linkages, four-bars and suspension rockers
+are modelled directly. One authored model runs on two interchangeable backends:
 
 - **[Maximal coordinates](rapide/maximal/README.md).** Every body carries a full pose. Joints are analytic bilateral
   constraints solved with a dense, rank-aware impulse solve, so closed loops and redundant
